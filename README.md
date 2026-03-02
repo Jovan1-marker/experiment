@@ -8,84 +8,21 @@ A full-stack school clinic system built with **Node.js + Express + SQLite**.
 
 ```
 mims/
-├── server.js          ← Main Express server (all API routes)
-├── database.js        ← SQLite setup + table creation + seeding
-├── package.json       ← Project dependencies
-├── mims.db            ← Auto-created SQLite database file
+├── server.js         
+├── database.js      
+├── package.json      
+├── mims.db      
 └── public/
-    ├── index.html     ← Landing page (slideshow, about, services)
-    ├── student.html   ← Student portal
-    ├── admin.html     ← Admin portal
+    ├── index.html    
+    ├── student.html  
+    ├── admin.html
     ├── css/
-    │   └── style.css  ← All styles for all three pages
+    │   └── style.css  
     └── js/
-        ├── index.js   ← Landing page JS (slideshow, login modal)
-        ├── student.js ← Student portal JS
-        └── admin.js   ← Admin portal JS
+        ├── index.js   
+        ├── student.js 
+        └── admin.js 
 ```
-
----
-
-## 🚀 Setup Instructions
-
-### Step 1 — Install Node.js
-Download and install Node.js from: https://nodejs.org (choose LTS version)
-
-### Step 2 — Open Terminal
-Navigate into the project folder:
-```bash
-cd mims
-```
-
-### Step 3 — Install Dependencies
-```bash
-npm install
-```
-This installs: `express`, `better-sqlite3`, and `cors`.
-
-### Step 4 — Start the Server
-```bash
-node server.js
-```
-You should see:
-```
-🏥 MIMS Server running!
-   Local:   http://localhost:3000
-```
-
-### Step 5 — Open in Browser
-- **Landing Page:** http://localhost:3000
-- **Student Portal:** http://localhost:3000/student.html
-- **Admin Portal:** http://localhost:3000/admin.html
-
----
-
-## 🔑 Login Credentials (Demo)
-
-| Role    | Username  | Password    |
-|---------|-----------|-------------|
-| Student | `student` | `student123` |
-| Admin   | `admin`   | `admin123`  |
-
----
-
-## 🗄️ Database
-
-The SQLite database (`mims.db`) is **auto-created** on first run.
-10 pre-seeded patients from **12 ICT – THALES** are inserted automatically.
-
----
-
-## 🎨 Design System
-
-| Color         | Usage                        | Value     |
-|---------------|------------------------------|-----------|
-| Dark Forest Green | Header, sidebar, buttons  | `#1B4332` |
-| Light Mint Green  | Page backgrounds           | `#D8F3DC` |
-| Gold/Yellow   | Active states, accents       | `#F4A820` |
-| Font          | Poppins (Google Fonts)       |           |
-
----
 
 ## ✨ Features
 

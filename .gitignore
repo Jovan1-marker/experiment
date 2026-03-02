@@ -16,4 +16,4 @@ yarn-error.log
 
 # Build/output folders (if any later)
 dist/
-build/
+build/"node_modules/" 

@@ -1,65 +1,140 @@
 // ============================================================
 // admin.js — Admin Portal JavaScript
 // Handles: Patients, Appointments, Waitlist, Records, Feedback
+// Fully connected to backend with authentication (cookies)
 // ============================================================
 
 // ─────────────────────────────────────────────────────────────
-// STATE — In-memory cache to avoid re-fetching unnecessarily
+// STATE
 // ─────────────────────────────────────────────────────────────
-let allPatients     = []; // Full patient list
-let currentRecordId = null; // The record currently open in the editor
-
+let allPatients = [];           // Cache for patient list
+let currentRecordId = null;     // Current open record in editor
 
 // ─────────────────────────────────────────────────────────────
-// SECTION NAVIGATION (same pattern as student.js)
+// AUTHENTICATED FETCH HELPER (used everywhere)
 // ─────────────────────────────────────────────────────────────
+async function apiFetch(url, options = {}) {
+  const defaultOptions = {
+    credentials: 'include',           // ← Sends auth cookies (critical!)
+    headers: { 'Content-Type': 'application/json' },
+  };
 
+  const merged = { ...defaultOptions, ...options };
+
+  if (options.body && typeof options.body !== 'string') {
+    merged.body = JSON.stringify(options.body);
+  }
+
+  const res = await fetch(url, merged);
+
+  if (res.status === 401 || res.status === 403) {
+    showToast('Session expired or unauthorized. Please log in again.', 'error');
+    setTimeout(() => { window.location.href = 'index.html'; }, 1800);
+    throw new Error('Unauthorized');
+  }
+
+  if (!res.ok) {
+    let errorMsg = 'Server error';
+    try {
+      const errData = await res.json();
+      errorMsg = errData.message || errorMsg;
+    } catch {}
+    throw new Error(errorMsg);
+  }
+
+  return res.json();
+}
+
+// ─────────────────────────────────────────────────────────────
+// TOAST NOTIFICATION
+// ─────────────────────────────────────────────────────────────
+function showToast(message, duration = 3000) {
+  const toast = document.getElementById('toast');
+  if (!toast) return;
+  toast.textContent = message;
+  toast.classList.add('show');
+  setTimeout(() => toast.classList.remove('show'), duration);
+}
+
+// ─────────────────────────────────────────────────────────────
+// SECTION NAVIGATION
+// ─────────────────────────────────────────────────────────────
 function showSection(name) {
   document.querySelectorAll('.portal-section').forEach(s => s.classList.remove('active'));
   document.querySelectorAll('.nav-item[data-section]').forEach(b => b.classList.remove('active'));
 
-  const s = document.getElementById('section-' + name);
-  if (s) s.classList.add('active');
-  const b = document.querySelector(`.nav-item[data-section="${name}"]`);
-  if (b) b.classList.add('active');
+  const section = document.getElementById('section-' + name);
+  const button = document.querySelector(`.nav-item[data-section="${name}"]`);
 
-  // Lazy-load data when the tab is first opened
-  if      (name === 'patient')     loadPatients();
+  if (section) section.classList.add('active');
+  if (button) button.classList.add('active');
+
+  // Lazy load data when switching tabs
+  if (name === 'patient') loadPatients();
   else if (name === 'appointment') loadAppointments();
-  else if (name === 'waitlist')    loadWaitlist();
-  else if (name === 'record')      loadRecords();
-  else if (name === 'feedback')    loadFeedback();
+  else if (name === 'waitlist') loadWaitlist();
+  else if (name === 'record') loadRecords();
+  else if (name === 'feedback') loadFeedback();
 }
 
+// ─────────────────────────────────────────────────────────────
+// AUTH CHECK ON PAGE LOAD
+// ─────────────────────────────────────────────────────────────
+async function checkAuth() {
+  try {
+    const data = await apiFetch('/api/me');
+    if (!data.success || data.role !== 'admin') {
+      showToast('Access denied. Admin only.', 'error');
+      setTimeout(() => window.location.href = 'index.html', 2000);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    showToast('Please log in first.', 'error');
+    setTimeout(() => window.location.href = 'index.html', 2000);
+    return false;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// LOGOUT
+// ─────────────────────────────────────────────────────────────
+function logout() {
+  if (!confirm('Are you sure you want to log out?')) return;
+
+  fetch('/api/logout', {
+    method: 'POST',
+    credentials: 'include'
+  })
+    .then(() => {
+      showToast('Logged out successfully');
+      setTimeout(() => window.location.href = 'index.html', 1200);
+    })
+    .catch(() => {
+      showToast('Logout failed – redirecting anyway', 'warning');
+      window.location.href = 'index.html';
+    });
+}
 
 // ═══════════════════════════════════════════════════════════════
-//  PATIENTS
+// PATIENTS
 // ═══════════════════════════════════════════════════════════════
-
-/**
- * loadPatients() — GETs all patients from the API and renders the grid.
- */
 async function loadPatients() {
   try {
-    const res  = await fetch('/api/patients');
-    allPatients = await res.json();
+    allPatients = await apiFetch('/api/patients');
     renderPatientGrid(allPatients);
     renderPatientStats(allPatients);
   } catch (err) {
     document.getElementById('patientGrid').innerHTML =
-      `<p style="color:var(--danger);">Error loading patients. Is the server running?</p>`;
-    console.error(err);
+      `<p style="color:var(--danger); text-align:center; padding:40px;">Error: ${err.message}</p>`;
   }
 }
 
-/**
- * renderPatientStats(patients) — Shows summary statistics above the grid
- */
 function renderPatientStats(patients) {
   const stats = document.getElementById('patientStats');
-  const total       = patients.length;
-  const normal      = patients.filter(p => p.bmi_status === 'Normal').length;
-  const overweight  = patients.filter(p => p.bmi_status === 'Overweight').length;
+  const total = patients.length;
+  const normal = patients.filter(p => p.bmi_status === 'Normal').length;
+  const overweight = patients.filter(p => p.bmi_status === 'Overweight').length;
   const underweight = patients.filter(p => p.bmi_status === 'Underweight').length;
 
   stats.innerHTML = `
@@ -86,25 +161,17 @@ function renderPatientStats(patients) {
   `;
 }
 
-/**
- * renderPatientGrid(patients) — Renders patient cards into the grid
- */
 function renderPatientGrid(patients) {
   const grid = document.getElementById('patientGrid');
-
   if (!patients.length) {
     grid.innerHTML = `<p style="color:var(--text-muted); text-align:center; grid-column:1/-1; padding:40px;">No patients found.</p>`;
     return;
   }
 
   grid.innerHTML = patients.map(p => {
-    // Generate initials for the avatar
     const initials = getInitials(p.full_name);
-
-    // BMI badge color class
-    const bmiClass =
-      p.bmi_status === 'Overweight'  ? 'bmi-overweight'  :
-      p.bmi_status === 'Underweight' ? 'bmi-underweight' : 'bmi-normal';
+    const bmiClass = p.bmi_status === 'Overweight' ? 'bmi-overweight' :
+                     p.bmi_status === 'Underweight' ? 'bmi-underweight' : 'bmi-normal';
 
     return `
       <article class="patient-card" aria-label="Patient: ${escapeHtml(p.full_name)}">
@@ -115,54 +182,29 @@ function renderPatientGrid(patients) {
             <div class="patient-card-lrn">LRN: ${escapeHtml(p.lrn)}</div>
           </div>
         </div>
-
         <div class="patient-card-body">
-          <div class="field">
-            <span class="field-label">Grade/Section</span>
-            <span class="field-value">${escapeHtml(p.grade_section || '—')}</span>
-          </div>
-          <div class="field">
-            <span class="field-label">BMI Status</span>
-            <span class="field-value ${bmiClass}">${escapeHtml(p.bmi_status || '—')}</span>
-          </div>
-          <div class="field">
-            <span class="field-label">Height</span>
-            <span class="field-value">${escapeHtml(p.height || '—')}</span>
-          </div>
-          <div class="field">
-            <span class="field-label">Weight</span>
-            <span class="field-value">${escapeHtml(p.weight || '—')}</span>
-          </div>
-          <div class="field">
-            <span class="field-label">Med History</span>
-            <span class="field-value">${escapeHtml(p.history || 'None')}</span>
-          </div>
-          <div class="field">
-            <span class="field-label">Clinic Exposure</span>
-            <span class="field-value">${escapeHtml(p.clinic_exposure || 'None')}</span>
-          </div>
+          <div class="field"><span class="field-label">Grade/Section</span><span class="field-value">${escapeHtml(p.grade_section || '—')}</span></div>
+          <div class="field"><span class="field-label">BMI Status</span><span class="field-value ${bmiClass}">${escapeHtml(p.bmi_status || '—')}</span></div>
+          <div class="field"><span class="field-label">Height</span><span class="field-value">${escapeHtml(p.height || '—')}</span></div>
+          <div class="field"><span class="field-label">Weight</span><span class="field-value">${escapeHtml(p.weight || '—')}</span></div>
+          <div class="field"><span class="field-label">Med History</span><span class="field-value">${escapeHtml(p.history || 'None')}</span></div>
+          <div class="field"><span class="field-label">Clinic Exposure</span><span class="field-value">${escapeHtml(p.clinic_exposure || 'None')}</span></div>
         </div>
-
-        <!-- Sensitive fields shown only if filled in -->
         ${(p.email || p.home_address || p.contact_no) ? `
           <div style="margin-top:10px; padding-top:10px; border-top:1px dashed var(--green-light); font-size:0.75rem; color:var(--text-muted);">
-            ${p.email       ? `<div>📧 ${escapeHtml(p.email)}</div>` : ''}
+            ${p.email ? `<div>📧 ${escapeHtml(p.email)}</div>` : ''}
             ${p.home_address ? `<div>🏠 ${escapeHtml(p.home_address)}</div>` : ''}
-            ${p.contact_no  ? `<div>📞 ${escapeHtml(p.contact_no)}</div>` : ''}
+            ${p.contact_no ? `<div>📞 ${escapeHtml(p.contact_no)}</div>` : ''}
           </div>` : ''}
-
         <div class="patient-card-actions">
           <button class="btn btn-outline btn-sm" onclick="openEditPatientModal(${p.id})">✏️ Edit</button>
-          <button class="btn btn-danger btn-sm"  onclick="deletePatient(${p.id})">🗑 Delete</button>
+          <button class="btn btn-danger btn-sm" onclick="deletePatient(${p.id})">🗑 Delete</button>
         </div>
       </article>
     `;
   }).join('');
 }
 
-/**
- * filterPatients(query) — Client-side search filter on cached patient data
- */
 function filterPatients(query) {
   if (!query.trim()) {
     renderPatientGrid(allPatients);
@@ -177,12 +219,8 @@ function filterPatients(query) {
   renderPatientGrid(filtered);
 }
 
-
-// --- PATIENT MODAL (Add / Edit) ---
-
-/** Opens the modal in "Add" mode */
+// Patient Modal
 function openAddPatientModal() {
-  // Check patient limit (50 max)
   if (allPatients.length >= 50) {
     showToast('⚠️ Maximum of 50 patients reached.', 4000);
     return;
@@ -193,23 +231,22 @@ function openAddPatientModal() {
   document.getElementById('patientModal').classList.remove('hidden');
 }
 
-/** Opens the modal in "Edit" mode and fills in existing data */
 function openEditPatientModal(id) {
   const p = allPatients.find(x => x.id === id);
   if (!p) return;
   document.getElementById('patientModalTitle').textContent = 'Edit Patient';
-  document.getElementById('patientId').value    = p.id;
-  document.getElementById('pFullName').value    = p.full_name    || '';
-  document.getElementById('pLrn').value         = p.lrn          || '';
-  document.getElementById('pGrade').value       = p.grade_section || '';
-  document.getElementById('pHeight').value      = p.height       || '';
-  document.getElementById('pWeight').value      = p.weight       || '';
-  document.getElementById('pBmi').value         = p.bmi_status   || 'Normal';
-  document.getElementById('pHistory').value     = p.history      || '';
-  document.getElementById('pExposure').value    = p.clinic_exposure || '';
-  document.getElementById('pEmail').value       = p.email        || '';
-  document.getElementById('pAddress').value     = p.home_address || '';
-  document.getElementById('pContact').value     = p.contact_no   || '';
+  document.getElementById('patientId').value = p.id;
+  document.getElementById('pFullName').value = p.full_name || '';
+  document.getElementById('pLrn').value = p.lrn || '';
+  document.getElementById('pGrade').value = p.grade_section || '';
+  document.getElementById('pHeight').value = p.height || '';
+  document.getElementById('pWeight').value = p.weight || '';
+  document.getElementById('pBmi').value = p.bmi_status || 'Normal';
+  document.getElementById('pHistory').value = p.history || '';
+  document.getElementById('pExposure').value = p.clinic_exposure || '';
+  document.getElementById('pEmail').value = p.email || '';
+  document.getElementById('pAddress').value = p.home_address || '';
+  document.getElementById('pContact').value = p.contact_no || '';
   document.getElementById('patientModal').classList.remove('hidden');
 }
 
@@ -222,25 +259,21 @@ function clearPatientForm() {
   document.getElementById('patientForm').reset();
 }
 
-/**
- * savePatient(event) — Creates or updates a patient via the API
- */
 async function savePatient(event) {
   event.preventDefault();
   const id = document.getElementById('patientId').value;
-
   const payload = {
-    full_name:      document.getElementById('pFullName').value.trim(),
-    lrn:            document.getElementById('pLrn').value.trim(),
-    grade_section:  document.getElementById('pGrade').value.trim(),
-    height:         document.getElementById('pHeight').value.trim(),
-    weight:         document.getElementById('pWeight').value.trim(),
-    bmi_status:     document.getElementById('pBmi').value,
-    history:        document.getElementById('pHistory').value.trim() || 'None',
-    clinic_exposure:document.getElementById('pExposure').value.trim() || 'None',
-    email:          document.getElementById('pEmail').value.trim(),
-    home_address:   document.getElementById('pAddress').value.trim(),
-    contact_no:     document.getElementById('pContact').value.trim()
+    full_name: document.getElementById('pFullName').value.trim(),
+    lrn: document.getElementById('pLrn').value.trim(),
+    grade_section: document.getElementById('pGrade').value.trim(),
+    height: document.getElementById('pHeight').value.trim(),
+    weight: document.getElementById('pWeight').value.trim(),
+    bmi_status: document.getElementById('pBmi').value,
+    history: document.getElementById('pHistory').value.trim() || 'None',
+    clinic_exposure: document.getElementById('pExposure').value.trim() || 'None',
+    email: document.getElementById('pEmail').value.trim(),
+    home_address: document.getElementById('pAddress').value.trim(),
+    contact_no: document.getElementById('pContact').value.trim()
   };
 
   if (!payload.full_name || !payload.lrn) {
@@ -251,62 +284,46 @@ async function savePatient(event) {
   try {
     let res;
     if (id) {
-      // UPDATE existing patient
-      res = await fetch(`/api/patients/${id}`, {
+      res = await apiFetch(`/patients/${id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body: payload
       });
     } else {
-      // CREATE new patient
-      res = await fetch('/api/patients', {
+      res = await apiFetch('/patients', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body: payload
       });
     }
 
-    const data = await res.json();
-    if (data.success || data.id) {
-      showToast(id ? '✅ Patient updated!' : '✅ Patient added!');
-      closePatientModal();
-      loadPatients(); // Refresh grid
-    } else {
-      showToast('❌ Error saving patient. LRN might already exist.', 4000);
-    }
+    showToast(id ? '✅ Patient updated!' : '✅ Patient added!');
+    closePatientModal();
+    loadPatients();
   } catch (err) {
-    showToast('❌ Cannot connect to server.', 4000);
+    showToast(`❌ ${err.message}`, 4000);
   }
 }
 
-/**
- * deletePatient(id) — Deletes a patient after confirmation
- */
 async function deletePatient(id) {
   if (!confirm('Delete this patient record? This cannot be undone.')) return;
   try {
-    await fetch(`/api/patients/${id}`, { method: 'DELETE' });
+    await apiFetch(`/patients/${id}`, { method: 'DELETE' });
     showToast('🗑 Patient deleted.');
     loadPatients();
   } catch (err) {
-    showToast('❌ Error deleting patient.', 4000);
+    showToast(`❌ ${err.message}`, 4000);
   }
 }
 
-
 // ═══════════════════════════════════════════════════════════════
-//  APPOINTMENTS INBOX
+// APPOINTMENTS INBOX
 // ═══════════════════════════════════════════════════════════════
-
 async function loadAppointments() {
   const tbody = document.getElementById('appointmentsBody');
   tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:20px;">Loading…</td></tr>`;
 
   try {
-    const res   = await fetch('/api/appointments');
-    const appts = await res.json();
+    const appts = await apiFetch('/appointments');
 
-    // Update the pending badge count in the sidebar
     const pendingCount = appts.filter(a => a.status === 'Pending').length;
     const badge = document.getElementById('pendingBadge');
     badge.textContent = pendingCount;
@@ -331,67 +348,56 @@ async function loadAppointments() {
           ${a.status === 'Pending' ? `
             <div style="display:flex; gap:6px;">
               <button class="btn btn-primary btn-sm" onclick="updateAppointmentStatus(${a.id}, 'Approved')">✅ Approve</button>
-              <button class="btn btn-danger btn-sm"  onclick="updateAppointmentStatus(${a.id}, 'Rejected')">❌ Reject</button>
+              <button class="btn btn-danger btn-sm" onclick="updateAppointmentStatus(${a.id}, 'Rejected')">❌ Reject</button>
             </div>` : `
             <button class="btn btn-outline btn-sm" onclick="deleteAppointment(${a.id})">🗑 Remove</button>`
           }
         </td>
       </tr>
     `).join('');
-
   } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="9" style="color:var(--danger); text-align:center; padding:20px;">Error loading appointments.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="9" style="color:var(--danger); text-align:center; padding:20px;">${err.message}</td></tr>`;
   }
 }
 
-/**
- * updateAppointmentStatus(id, status) — Approve or Reject an appointment
- * Approving automatically moves it to the Waitlist section.
- */
 async function updateAppointmentStatus(id, status) {
   try {
-    const res  = await fetch(`/api/appointments/${id}/status`, {
+    await apiFetch(`/appointments/${id}/status`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status })
+      body: { status }
     });
-    const data = await res.json();
-    if (data.success) {
-      showToast(status === 'Approved'
-        ? '✅ Appointment approved and added to Waitlist!'
-        : '❌ Appointment rejected.');
-      loadAppointments(); // Refresh inbox
-    }
+    showToast(status === 'Approved' ? '✅ Approved & added to Waitlist!' : '❌ Rejected.', 3000);
+    loadAppointments();
+    loadWaitlist(); // Refresh waitlist if open
   } catch (err) {
-    showToast('❌ Error updating status.', 4000);
+    showToast(`❌ ${err.message}`, 4000);
   }
 }
 
 async function deleteAppointment(id) {
   if (!confirm('Remove this appointment from the list?')) return;
-  await fetch(`/api/appointments/${id}`, { method: 'DELETE' });
-  showToast('🗑 Appointment removed.');
-  loadAppointments();
+  try {
+    await apiFetch(`/appointments/${id}`, { method: 'DELETE' });
+    showToast('🗑 Appointment removed.');
+    loadAppointments();
+  } catch (err) {
+    showToast(`❌ ${err.message}`, 4000);
+  }
 }
 
-
 // ═══════════════════════════════════════════════════════════════
-//  WAITLIST
+// WAITLIST
 // ═══════════════════════════════════════════════════════════════
-
 async function loadWaitlist() {
   const tbody = document.getElementById('waitlistBody');
   tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:20px;">Loading…</td></tr>`;
 
   try {
-    const res   = await fetch('/api/appointments/waitlist');
-    const items = await res.json();
-
+    const items = await apiFetch('/appointments/waitlist');
     if (!items.length) {
-      tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color:var(--text-muted); padding:30px;">No approved appointments yet. Approve some from the Appointment tab.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color:var(--text-muted); padding:30px;">No approved appointments yet.</td></tr>`;
       return;
     }
-
     tbody.innerHTML = items.map((a, i) => `
       <tr>
         <td>${i + 1}</td>
@@ -403,28 +409,20 @@ async function loadWaitlist() {
         <td>${formatDate(a.created_at)}</td>
       </tr>
     `).join('');
-
   } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="7" style="color:var(--danger); text-align:center; padding:20px;">Error loading waitlist.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" style="color:var(--danger); text-align:center; padding:20px;">${err.message}</td></tr>`;
   }
 }
 
-
 // ═══════════════════════════════════════════════════════════════
-//  RECORD FILE MANAGER
-// ═══════════════════════════════════════════════════════════════
-
-/**
- * loadRecords() — Fetches and displays all records as file icons
- */
+// RECORDS (your original logic with auth fix)
+// ╗═══════════════════════════════════════════════════════════════
 async function loadRecords() {
   const grid = document.getElementById('recordsGrid');
   grid.innerHTML = `<p style="color:var(--text-muted);">Loading…</p>`;
 
   try {
-    const res     = await fetch('/api/records');
-    const records = await res.json();
-
+    const records = await apiFetch('/records');
     if (!records.length) {
       grid.innerHTML = `
         <div style="grid-column:1/-1; text-align:center; padding:50px; color:var(--text-muted);">
@@ -433,7 +431,6 @@ async function loadRecords() {
         </div>`;
       return;
     }
-
     grid.innerHTML = records.map(r => `
       <div class="record-file" onclick="openRecord(${r.id})" role="button" tabindex="0"
            aria-label="Open record: ${escapeHtml(r.title)}"
@@ -441,115 +438,75 @@ async function loadRecords() {
         <div class="file-icon" aria-hidden="true">📄</div>
         <div class="file-name">${escapeHtml(r.title)}</div>
         <div class="file-date">${formatDate(r.updated_at)}</div>
-        <!-- Delete button (appears on hover via CSS) -->
-        <button class="file-delete"
-                onclick="event.stopPropagation(); deleteRecord(${r.id})"
-                aria-label="Delete record ${escapeHtml(r.title)}">✕</button>
+        <button class="file-delete" onclick="event.stopPropagation(); deleteRecord(${r.id})" aria-label="Delete record">✕</button>
       </div>
     `).join('');
-
   } catch (err) {
-    grid.innerHTML = `<p style="color:var(--danger);">Error loading records.</p>`;
+    grid.innerHTML = `<p style="color:var(--danger);">Error: ${err.message}</p>`;
   }
 }
 
-/**
- * createNewRecord() — Creates a blank record via API and opens the editor
- */
 async function createNewRecord() {
   try {
-    const res  = await fetch('/api/records', {
+    const data = await apiFetch('/records', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title: 'Untitled Record' })
+      body: { title: 'Untitled Record' }
     });
-    const data = await res.json();
-    if (data.id) {
-      // Open the newly created record in the editor immediately
-      openRecord(data.id);
-    }
+    if (data.id) openRecord(data.id);
   } catch (err) {
-    showToast('❌ Error creating record.', 4000);
+    showToast(`❌ ${err.message}`, 4000);
   }
 }
 
-/**
- * openRecord(id) — Fetches a record's content and opens the text editor
- */
 async function openRecord(id) {
   try {
-    const res    = await fetch(`/api/records/${id}`);
-    const record = await res.json();
-
-    // Store the current record's ID so saveRecord() knows what to save
+    const record = await apiFetch(`/records/${id}`);
     currentRecordId = record.id;
-
-    // Fill in the editor fields
-    document.getElementById('editorTitle').value    = record.title   || 'Untitled Record';
+    document.getElementById('editorTitle').value = record.title || 'Untitled Record';
     document.getElementById('editorTextarea').value = record.content || '';
-
-    // Switch view: hide grid, show editor
     document.getElementById('recordsGridView').classList.add('hidden');
     document.getElementById('recordEditorView').classList.remove('hidden');
-    // Focus the textarea
     document.getElementById('editorTextarea').focus();
-
   } catch (err) {
-    showToast('❌ Error opening record.', 4000);
+    showToast(`❌ ${err.message}`, 4000);
   }
 }
 
-/**
- * saveRecord() — Saves the current editor content to the API
- */
 async function saveRecord() {
   if (!currentRecordId) return;
-  const title   = document.getElementById('editorTitle').value.trim()    || 'Untitled Record';
+  const title = document.getElementById('editorTitle').value.trim() || 'Untitled Record';
   const content = document.getElementById('editorTextarea').value;
 
   try {
-    const res  = await fetch(`/api/records/${currentRecordId}`, {
+    await apiFetch(`/records/${currentRecordId}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title, content })
+      body: { title, content }
     });
-    const data = await res.json();
-    if (data.success) {
-      showToast('💾 Record saved!');
-    }
+    showToast('💾 Record saved!');
   } catch (err) {
-    showToast('❌ Error saving record.', 4000);
+    showToast(`❌ ${err.message}`, 4000);
   }
 }
 
-/**
- * closeEditor() — Saves and goes back to the file grid
- */
 function closeEditor() {
   saveRecord().then(() => {
     document.getElementById('recordEditorView').classList.add('hidden');
     document.getElementById('recordsGridView').classList.remove('hidden');
     currentRecordId = null;
-    loadRecords(); // Refresh grid to show updated timestamp
+    loadRecords();
   });
 }
 
-/**
- * deleteCurrentRecord() — Deletes the record currently open in the editor
- */
 async function deleteCurrentRecord() {
   if (!currentRecordId) return;
   if (!confirm('Delete this record permanently?')) return;
   await deleteRecord(currentRecordId, true);
 }
 
-/**
- * deleteRecord(id, fromEditor) — Deletes a record by id
- */
 async function deleteRecord(id, fromEditor = false) {
   if (!fromEditor && !confirm('Delete this record permanently?')) return;
   try {
-    await fetch(`/api/records/${id}`, { method: 'DELETE' });
+    await apiFetch(`/records/${id}`, { method: 'DELETE' });
     showToast('🗑 Record deleted.');
     if (fromEditor) {
       document.getElementById('recordEditorView').classList.add('hidden');
@@ -558,28 +515,23 @@ async function deleteRecord(id, fromEditor = false) {
     }
     loadRecords();
   } catch (err) {
-    showToast('❌ Error deleting record.', 4000);
+    showToast(`❌ ${err.message}`, 4000);
   }
 }
 
-
 // ═══════════════════════════════════════════════════════════════
-//  FEEDBACK
+// FEEDBACK
 // ═══════════════════════════════════════════════════════════════
-
 async function loadFeedback() {
   const tbody = document.getElementById('feedbackBody');
   tbody.innerHTML = `<tr><td colspan="4" style="text-align:center; padding:20px;">Loading…</td></tr>`;
 
   try {
-    const res   = await fetch('/api/feedback');
-    const items = await res.json();
-
+    const items = await apiFetch('/feedback');
     if (!items.length) {
       tbody.innerHTML = `<tr><td colspan="4" style="text-align:center; color:var(--text-muted); padding:30px;">No feedback messages yet.</td></tr>`;
       return;
     }
-
     tbody.innerHTML = items.map((f, i) => `
       <tr>
         <td>${i + 1}</td>
@@ -590,35 +542,25 @@ async function loadFeedback() {
         </td>
       </tr>
     `).join('');
-
   } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="4" style="color:var(--danger); text-align:center; padding:20px;">Error loading feedback.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="4" style="color:var(--danger); text-align:center; padding:20px;">${err.message}</td></tr>`;
   }
 }
 
 async function deleteFeedback(id) {
   if (!confirm('Delete this feedback message?')) return;
-  await fetch(`/api/feedback/${id}`, { method: 'DELETE' });
-  showToast('🗑 Feedback deleted.');
-  loadFeedback();
-}
-
-
-// ─────────────────────────────────────────────────────────────
-// LOG OUT
-// ─────────────────────────────────────────────────────────────
-function logout() {
-  if (confirm('Are you sure you want to log out?')) {
-    window.location.href = 'index.html';
+  try {
+    await apiFetch(`/feedback/${id}`, { method: 'DELETE' });
+    showToast('🗑 Feedback deleted.');
+    loadFeedback();
+  } catch (err) {
+    showToast(`❌ ${err.message}`, 4000);
   }
 }
 
-
 // ─────────────────────────────────────────────────────────────
-// HELPERS
+// HELPERS (keep your original ones)
 // ─────────────────────────────────────────────────────────────
-
-/** getInitials(name) — Returns first 2 initials from a full name */
 function getInitials(name) {
   if (!name) return '?';
   const parts = name.trim().split(' ').filter(Boolean);
@@ -641,23 +583,19 @@ function escapeHtml(str) {
   return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-function showToast(message, duration = 3000) {
-  const toast = document.getElementById('toast');
-  toast.textContent = message;
-  toast.classList.add('show');
-  setTimeout(() => toast.classList.remove('show'), duration);
-}
-
-// Close patient modal on overlay click
+// Close modal on overlay click
 document.getElementById('patientModal').addEventListener('click', function(e) {
   if (e.target === this) closePatientModal();
 });
 
+// ─────────────────────────────────────────────────────────────
+// INITIALIZE
+// ─────────────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', async () => {
+  const authenticated = await checkAuth();
+  if (!authenticated) return;
 
-// ─────────────────────────────────────────────────────────────
-// INITIALISE — Load patients when page first opens
-// ─────────────────────────────────────────────────────────────
-window.addEventListener('DOMContentLoaded', () => {
-  loadPatients();         // Load patient grid on startup
-  loadAppointments();     // Also silently load appointments to show badge count
+  // Load initial data
+  loadPatients();
+  loadAppointments(); // for badge count
 });

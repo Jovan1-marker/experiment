@@ -1,0 +1,19 @@
+# Visual Studio / IDE files
+.vs/
+*.user
+*.suo
+*.sln.docstates
+
+# Node.js
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# SQLite database (never commit real data)
+*.db
+*.db-shm
+*.db-wal
+
+# Build/output folders (if any later)
+dist/
+build/

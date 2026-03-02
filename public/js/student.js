@@ -1,28 +1,15 @@
-// ============================================================
-// student.js — Student Portal JavaScript
-// Handles: section navigation, appointment submit/lookup,
-// feedback submit, authentication check
-// ============================================================
-
-// ─────────────────────────────────────────────────────────────
-// CONFIG & AUTHENTICATED FETCH HELPER
-// ─────────────────────────────────────────────────────────────
 const API_BASE = '/api';
 
 async function apiFetch(endpoint, options = {}) {
   const defaultOpts = {
-    credentials: 'include',           // ← Critical: sends auth cookies
+    credentials: 'include',   
     headers: { 'Content-Type': 'application/json' },
   };
-
   const merged = { ...defaultOpts, ...options };
-
   if (options.body && typeof options.body !== 'string') {
     merged.body = JSON.stringify(options.body);
   }
-
   const res = await fetch(API_BASE + endpoint, merged);
-
   if (res.status === 401 || res.status === 403) {
     showToast('Session expired or unauthorized. Please log in.', 'error');
     setTimeout(() => { window.location.href = 'index.html'; }, 1800);
@@ -37,10 +24,6 @@ async function apiFetch(endpoint, options = {}) {
 
   return res.json();
 }
-
-// ─────────────────────────────────────────────────────────────
-// TOAST NOTIFICATION
-// ─────────────────────────────────────────────────────────────
 function showToast(message, type = 'success', duration = 3000) {
   const toast = document.getElementById('toast');
   if (!toast) return;
@@ -48,10 +31,6 @@ function showToast(message, type = 'success', duration = 3000) {
   toast.className = `toast ${type} show`;
   setTimeout(() => { toast.className = 'toast'; }, duration);
 }
-
-// ─────────────────────────────────────────────────────────────
-// AUTH CHECK ON PAGE LOAD
-// ─────────────────────────────────────────────────────────────
 async function checkAuth() {
   try {
     const data = await apiFetch('/me');
@@ -71,10 +50,6 @@ async function checkAuth() {
     return false;
   }
 }
-
-// ─────────────────────────────────────────────────────────────
-// LOGOUT
-// ─────────────────────────────────────────────────────────────
 async function logout() {
   if (!confirm('Are you sure you want to log out?')) return;
 
@@ -86,10 +61,6 @@ async function logout() {
   }
   setTimeout(() => { window.location.href = 'index.html'; }, 1200);
 }
-
-// ─────────────────────────────────────────────────────────────
-// SIDEBAR NAVIGATION
-// ─────────────────────────────────────────────────────────────
 function showSection(name) {
   document.querySelectorAll('.portal-section').forEach(s => s.classList.remove('active'));
   document.querySelectorAll('.nav-item[data-section]').forEach(b => b.classList.remove('active'));
@@ -99,16 +70,10 @@ function showSection(name) {
 
   if (section) section.classList.add('active');
   if (button) button.classList.add('active');
-
-  // Load data when switching to these tabs
   if (name === 'appointments') {
-    loadStudentAppointments(''); // reset to prompt
+    loadStudentAppointments('');
   }
 }
-
-// ─────────────────────────────────────────────────────────────
-// MY APPOINTMENTS — Student lookup by name
-// ─────────────────────────────────────────────────────────────
 async function loadStudentAppointments(nameQuery = '') {
   const tbody = document.getElementById('studentAppointmentsBody');
 
@@ -157,10 +122,6 @@ async function loadStudentAppointments(nameQuery = '') {
       </tr>`;
   }
 }
-
-// ─────────────────────────────────────────────────────────────
-// SUBMIT APPOINTMENT REQUEST
-// ─────────────────────────────────────────────────────────────
 async function submitAppointment(event) {
   event.preventDefault();
 
@@ -187,15 +148,11 @@ async function submitAppointment(event) {
 
     showToast('✅ Appointment request submitted! Wait for admin approval.', 'success');
     document.getElementById('appointmentForm').reset();
-    showSection('appointments'); // Switch to My Appointments tab
+    showSection('appointments');
   } catch (err) {
     showToast(`❌ Failed to submit: ${err.message}`, 'error');
   }
 }
-
-// ─────────────────────────────────────────────────────────────
-// SUBMIT FEEDBACK / COMMENT
-// ─────────────────────────────────────────────────────────────
 async function submitFeedback(event) {
   event.preventDefault();
 
@@ -218,10 +175,6 @@ async function submitFeedback(event) {
     showToast(`❌ Failed to send: ${err.message}`, 'error');
   }
 }
-
-// ─────────────────────────────────────────────────────────────
-// HELPERS
-// ─────────────────────────────────────────────────────────────
 function statusBadge(status) {
   const map = {
     'Pending': 'badge-pending',
@@ -246,17 +199,9 @@ function escapeHtml(str) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
 }
-
-// ─────────────────────────────────────────────────────────────
-// INITIALIZATION
-// ─────────────────────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', async () => {
   const isAuthenticated = await checkAuth();
   if (!isAuthenticated) return;
-
-  // Set default view
   showSection('appointments');
-
-  // Optional: auto-focus name input in appointments tab
   document.getElementById('filterName')?.focus();
 });

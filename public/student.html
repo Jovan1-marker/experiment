@@ -1,40 +1,19 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <!--
-    ╔══════════════════════════════════════════════════════════╗
-    ║  student.html — Student Portal                           ║
-    ║  Left sidebar + main content area layout                 ║
-    ╚══════════════════════════════════════════════════════════╝
-  -->
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MIMS — Student Portal</title>
   <link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
-
-  <!-- ═══════════════════════════════════════════════════════
-       TOP BAR
-  ═══════════════════════════════════════════════════════════ -->
   <header class="page-topbar" role="banner">
     <div class="logo-text">🏥 MIMS — <span>Student Portal</span></div>
     <div class="user-info" id="studentGreeting">Welcome, Student</div>
   </header>
-
-
-  <!-- ═══════════════════════════════════════════════════════
-       MAIN LAYOUT: Sidebar + Content
-  ═══════════════════════════════════════════════════════════ -->
   <div class="portal-wrapper">
-
-    <!-- ─────────────────────────────────────────────────────
-         LEFT SIDEBAR
-    ───────────────────────────────────────────────────────── -->
     <aside class="sidebar" role="navigation" aria-label="Student navigation">
       <nav class="sidebar-nav">
-
-        <!-- My Appointments -->
         <button class="nav-item active"
                 data-section="appointments"
                 onclick="showSection('appointments')"
@@ -42,8 +21,6 @@
           <span class="nav-icon" aria-hidden="true">📅</span>
           My Appointments
         </button>
-
-        <!-- Request Appointment -->
         <button class="nav-item"
                 data-section="request"
                 onclick="showSection('request')"
@@ -51,8 +28,6 @@
           <span class="nav-icon" aria-hidden="true">📝</span>
           Request Appointment
         </button>
-
-        <!-- Announcements -->
         <button class="nav-item"
                 data-section="announcements"
                 onclick="showSection('announcements')"
@@ -61,7 +36,6 @@
           Announcements
         </button>
 
-        <!-- Comment / Feedback -->
         <button class="nav-item"
                 data-section="comment"
                 onclick="showSection('comment')"
@@ -69,11 +43,8 @@
           <span class="nav-icon" aria-hidden="true">💬</span>
           Comment
         </button>
-
-        <!-- Divider before logout -->
         <div class="sidebar-divider" aria-hidden="true"></div>
 
-        <!-- Log Out -->
         <button class="nav-item"
                 onclick="logout()"
                 aria-label="Log Out">
@@ -83,24 +54,12 @@
 
       </nav>
     </aside>
-
-
-    <!-- ─────────────────────────────────────────────────────
-         MAIN CONTENT AREA
-    ───────────────────────────────────────────────────────── -->
     <main class="main-content" role="main">
-
-
-      <!-- ╔═══════════════════════════════════════════════╗
-           ║  SECTION 1: My Appointments                   ║
-           ╚═══════════════════════════════════════════════╝ -->
       <section id="section-appointments" class="portal-section active" aria-labelledby="appt-heading">
 
         <div class="section-card">
           <h2 id="appt-heading">📅 My Appointments</h2>
           <p class="section-subtitle">Track the status of your submitted appointment requests below.</p>
-
-          <!-- Filter bar -->
           <div style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:18px; align-items:center;">
             <label for="filterName" style="font-weight:600; font-size:0.875rem;">Search by name:</label>
             <input type="text"
@@ -112,8 +71,6 @@
               🔍 Search
             </button>
           </div>
-
-          <!-- Table container -->
           <div style="overflow-x: auto;">
             <table class="data-table" aria-label="My appointment requests">
               <thead>
@@ -128,7 +85,6 @@
                 </tr>
               </thead>
               <tbody id="studentAppointmentsBody">
-                <!-- Filled by JavaScript -->
                 <tr>
                   <td colspan="7" style="text-align:center; color:var(--text-muted); padding:30px;">
                     Enter your name above and click Search to view your appointments.
@@ -140,24 +96,15 @@
 
         </div>
       </section>
-
-
-      <!-- ╔═══════════════════════════════════════════════╗
-           ║  SECTION 2: Request Appointment               ║
-           ╚═══════════════════════════════════════════════╝ -->
       <section id="section-request" class="portal-section" aria-labelledby="req-heading">
 
         <div class="section-card">
           <h2 id="req-heading">📝 Request an Appointment</h2>
           <p class="section-subtitle">Fill in the form below to request a clinic appointment. The admin will review and approve it.</p>
-
-          <!-- Appointment Request Form -->
           <form id="appointmentForm"
                 onsubmit="submitAppointment(event)"
                 novalidate
                 style="max-width: 600px;">
-
-            <!-- Type of Clinic Service (Dropdown) -->
             <div class="form-group">
               <label for="serviceType">Type of Clinic Service <span style="color:var(--danger)">*</span></label>
               <select id="serviceType" name="service_type" required>
@@ -170,8 +117,6 @@
                 <option value="Other">Other</option>
               </select>
             </div>
-
-            <!-- Student Name -->
             <div class="form-group">
               <label for="studentName">Full Name <span style="color:var(--danger)">*</span></label>
               <input type="text"
@@ -181,8 +126,6 @@
                      autocomplete="name"
                      required>
             </div>
-
-            <!-- Grade & Section -->
             <div class="form-group">
               <label for="studentGrade">Grade &amp; Section <span style="color:var(--danger)">*</span></label>
               <input type="text"
@@ -191,8 +134,6 @@
                      placeholder="e.g. 12 ICT - THALES"
                      required>
             </div>
-
-            <!-- LRN -->
             <div class="form-group">
               <label for="studentLrn">LRN (Learner Reference Number) <span style="color:var(--danger)">*</span></label>
               <input type="text"
@@ -202,8 +143,6 @@
                      maxlength="12"
                      required>
             </div>
-
-            <!-- Description of Appointment -->
             <div class="form-group">
               <label for="apptDescription">Description of Appointment <span style="color:var(--danger)">*</span></label>
               <textarea id="apptDescription"
@@ -212,8 +151,6 @@
                         rows="5"
                         required></textarea>
             </div>
-
-            <!-- Submit -->
             <button type="submit" class="btn btn-primary">
               📨 Submit Request
             </button>
@@ -222,11 +159,6 @@
         </div>
 
       </section>
-
-
-      <!-- ╔═══════════════════════════════════════════════╗
-           ║  SECTION 3: Announcements                     ║
-           ╚═══════════════════════════════════════════════╝ -->
       <section id="section-announcements" class="portal-section" aria-labelledby="ann-heading">
 
         <div class="section-card">
@@ -253,11 +185,6 @@
         </div>
 
       </section>
-
-
-      <!-- ╔═══════════════════════════════════════════════╗
-           ║  SECTION 4: Comment / Feedback                ║
-           ╚═══════════════════════════════════════════════╝ -->
       <section id="section-comment" class="portal-section" aria-labelledby="comment-heading">
 
         <div class="section-card">
@@ -287,13 +214,9 @@
 
       </section>
 
-    </main><!-- /main-content -->
-  </div><!-- /portal-wrapper -->
-
-  <!-- Toast notification -->
+    </main>
+  </div>
   <div id="toast" role="status" aria-live="polite"></div>
-
-  <!-- Student portal JS -->
   <script src="js/student.js"></script>
 
 </body>

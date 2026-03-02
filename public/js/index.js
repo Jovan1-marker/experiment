@@ -1,167 +1,138 @@
-// ============================================================
-// index.js — Landing Page JavaScript
-// Handles: Slideshow, Login modal, Login form submission
-// ============================================================
-
-// ─────────────────────────────────────────────────────────────
-// SLIDESHOW
-// ─────────────────────────────────────────────────────────────
 let currentSlide = 0;
 const slides = document.querySelectorAll('.slide');
 const dots = document.querySelectorAll('.dot');
-
 function goToSlide(n) {
   slides.forEach(s => s.classList.remove('active'));
   dots.forEach(d => {
     d.classList.remove('active');
     d.setAttribute('aria-selected', 'false');
   });
-
   currentSlide = ((n % slides.length) + slides.length) % slides.length;
-
   slides[currentSlide].classList.add('active');
   dots[currentSlide].classList.add('active');
   dots[currentSlide].setAttribute('aria-selected', 'true');
 }
-
 function nextSlide() {
   goToSlide(currentSlide + 1);
 }
-
-// Auto-advance every 8 seconds
-const slideshowTimer = setInterval(nextSlide, 8000);
-
-// Pause on hover
+let slideshowTimer = setInterval(nextSlide, 8000);
 const slideshowSection = document.querySelector('.slideshow-section');
 if (slideshowSection) {
   slideshowSection.addEventListener('mouseenter', () => clearInterval(slideshowTimer));
-  slideshowSection.addEventListener('mouseleave', () => setInterval(nextSlide, 8000));
+  slideshowSection.addEventListener('mouseleave', () => {
+    slideshowTimer = setInterval(nextSlide, 8000);
+  });
 }
-
-// ─────────────────────────────────────────────────────────────
-// LOGIN MODAL CONTROLS
-// ─────────────────────────────────────────────────────────────
 function openLoginModal() {
   document.getElementById('loginModal').classList.remove('hidden');
-  document.getElementById('loginError').style.display = 'none';
-  document.getElementById('login-form').reset();
-  setTimeout(() => document.getElementById('loginUsername').focus(), 100);
+  switchTab('student');
 }
-
 function closeLoginModal() {
   document.getElementById('loginModal').classList.add('hidden');
   document.getElementById('loginError').style.display = 'none';
+  document.getElementById('signupError').style.display = 'none';
+  document.getElementById('login-form').reset();
+  document.getElementById('signup-form').reset();
 }
-
-// Close on overlay click
 document.getElementById('loginModal').addEventListener('click', (e) => {
   if (e.target === e.currentTarget) closeLoginModal();
 });
-
-// Close with Escape key
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') closeLoginModal();
 });
+function switchTab(tab) {
+  document.querySelectorAll('.login-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('login-form').classList.add('hidden');
+  document.getElementById('signup-form').classList.add('hidden');
 
-// ─────────────────────────────────────────────────────────────
-// ROLE TAB SWITCHING
-// ─────────────────────────────────────────────────────────────
-function switchTab(role) {
-  document.getElementById('loginRole').value = role;
-
-  document.getElementById('tab-student').classList.toggle('active', role === 'student');
-  document.getElementById('tab-admin').classList.toggle('active', role === 'admin');
-
-  const hint = document.getElementById('loginHint');
-  if (role === 'student') {
-    hint.innerHTML = '<strong>Student demo:</strong> username: <code>student</code> / password: <code>student123</code>';
-  } else {
-    hint.innerHTML = '<strong>Admin demo:</strong> username: <code>admin</code> / password: <code>admin123</code>';
+  if (tab === 'student') {
+    document.getElementById('tab-student').classList.add('active');
+    document.getElementById('login-form').classList.remove('hidden');
+    document.getElementById('loginRole').value = 'student';
+  } else if (tab === 'admin') {
+    document.getElementById('tab-admin').classList.add('active');
+    document.getElementById('login-form').classList.remove('hidden');
+    document.getElementById('loginRole').value = 'admin';
+  } else if (tab === 'signup') {
+    document.getElementById('tab-signup').classList.add('active');
+    document.getElementById('signup-form').classList.remove('hidden');
   }
-
-  document.getElementById('loginError').style.display = 'none';
 }
-
-// ─────────────────────────────────────────────────────────────
-// HANDLE LOGIN
-// ─────────────────────────────────────────────────────────────
-async function handleLogin(event) {
-  event.preventDefault();
-
+async function handleLogin(e) {
+  e.preventDefault();
+  const role = document.getElementById('loginRole').value;
   const username = document.getElementById('loginUsername').value.trim();
   const password = document.getElementById('loginPassword').value;
-  const role = document.getElementById('loginRole').value;
-
-  const errorEl = document.getElementById('loginError');
-  const submitBtn = event.target.querySelector('button[type="submit"]');
-
   if (!username || !password) {
-    errorEl.textContent = 'Please enter both username and password.';
-    errorEl.style.display = 'block';
+    document.getElementById('loginError').textContent = 'Please fill in all fields';
+    document.getElementById('loginError').style.display = 'block';
     return;
   }
-
-  errorEl.style.display = 'none';
-  submitBtn.disabled = true;
-  submitBtn.textContent = 'Signing in…';
-
   try {
-    const response = await fetch('/api/login', {
+    const res = await fetch('/api/login', {
       method: 'POST',
-      credentials: 'include',                 // ← Required for cookies/session
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password })
+      credentials: 'include',
+      body: JSON.stringify({ username, password, role })
     });
-
-    const data = await response.json();
-
-    if (response.ok && data.success) {
-      showToast(`Welcome, ${data.role}! Redirecting...`, 3000);
-
-      // Redirect based on role from server
-      setTimeout(() => {
-        if (data.role === 'admin') {
-          window.location.href = '/admin.html';
-        } else {
-          window.location.href = '/student.html';
-        }
-      }, 1200);
-    } else {
-      errorEl.textContent = data.message || 'Invalid credentials';
-      errorEl.style.display = 'block';
-      submitBtn.disabled = false;
-      submitBtn.textContent = 'Sign In →';
-    }
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || 'Invalid credentials');
+    showToast('Login successful', 'success');
+    setTimeout(() => {
+      window.location.href = role === 'admin' ? '/admin.html' : '/student.html';
+    }, 800);
   } catch (err) {
-    errorEl.textContent = 'Cannot connect to server. Is the backend running?';
-    errorEl.style.display = 'block';
-    submitBtn.disabled = false;
-    submitBtn.textContent = 'Sign In →';
-    console.error('Login error:', err);
+    document.getElementById('loginError').textContent = err.message;
+    document.getElementById('loginError').style.display = 'block';
   }
 }
-
-// ─────────────────────────────────────────────────────────────
-// TOAST NOTIFICATION
-// ─────────────────────────────────────────────────────────────
-function showToast(message, duration = 3000) {
+async function handleSignup(e) {
+  e.preventDefault();
+  const lrn = document.getElementById('signupLrn').value.trim();
+  const password = document.getElementById('signupPassword').value;
+  const confirm = document.getElementById('signupConfirm').value;
+  if (lrn.length !== 12 || !/^\d{12}$/.test(lrn)) {
+    document.getElementById('signupError').textContent = 'LRN must be exactly 12 digits';
+    document.getElementById('signupError').style.display = 'block';
+    return;
+  }
+  if (password.length < 6) {
+    document.getElementById('signupError').textContent = 'Password must be at least 6 characters';
+    document.getElementById('signupError').style.display = 'block';
+    return;
+  }
+  if (password !== confirm) {
+    document.getElementById('signupError').textContent = 'Passwords do not match';
+    document.getElementById('signupError').style.display = 'block';
+    return;
+  }
+  try {
+    const res = await fetch('/api/student/signup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ lrn, password })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || 'Registration failed');
+    showToast('Account created! You can now sign in.', 'success');
+    setTimeout(() => switchTab('student'), 1500);
+  } catch (err) {
+    document.getElementById('signupError').textContent = err.message;
+    document.getElementById('signupError').style.display = 'block';
+  }
+}
+function showToast(message, type = 'success') {
   const toast = document.getElementById('toast');
   if (!toast) return;
   toast.textContent = message;
-  toast.classList.add('show');
-  setTimeout(() => toast.classList.remove('show'), duration);
+  toast.className = `toast ${type} show`;
+  setTimeout(() => toast.className = 'toast', 3000);
 }
-
-// ─────────────────────────────────────────────────────────────
-// INITIALIZATION
-// ─────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
-  // Login button
   document.getElementById('openLoginBtn').addEventListener('click', (e) => {
     e.preventDefault();
     openLoginModal();
   });
-
-  // Form submit
   document.getElementById('login-form').addEventListener('submit', handleLogin);
+  document.getElementById('signup-form').addEventListener('submit', handleSignup);
 });

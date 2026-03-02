@@ -1,38 +1,21 @@
-// ============================================================
-// admin.js — Admin Portal JavaScript
-// Handles: Patients, Appointments, Waitlist, Records, Feedback
-// Fully connected to backend with authentication (cookies)
-// ============================================================
+let allPatients = [];
+let currentRecordId = null;
 
-// ─────────────────────────────────────────────────────────────
-// STATE
-// ─────────────────────────────────────────────────────────────
-let allPatients = [];           // Cache for patient list
-let currentRecordId = null;     // Current open record in editor
-
-// ─────────────────────────────────────────────────────────────
-// AUTHENTICATED FETCH HELPER (used everywhere)
-// ─────────────────────────────────────────────────────────────
 async function apiFetch(url, options = {}) {
   const defaultOptions = {
-    credentials: 'include',           // ← Sends auth cookies (critical!)
+    credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
   };
-
   const merged = { ...defaultOptions, ...options };
-
   if (options.body && typeof options.body !== 'string') {
     merged.body = JSON.stringify(options.body);
   }
-
   const res = await fetch(url, merged);
-
   if (res.status === 401 || res.status === 403) {
     showToast('Session expired or unauthorized. Please log in again.', 'error');
     setTimeout(() => { window.location.href = 'index.html'; }, 1800);
     throw new Error('Unauthorized');
   }
-
   if (!res.ok) {
     let errorMsg = 'Server error';
     try {
@@ -41,13 +24,9 @@ async function apiFetch(url, options = {}) {
     } catch {}
     throw new Error(errorMsg);
   }
-
   return res.json();
 }
 
-// ─────────────────────────────────────────────────────────────
-// TOAST NOTIFICATION
-// ─────────────────────────────────────────────────────────────
 function showToast(message, duration = 3000) {
   const toast = document.getElementById('toast');
   if (!toast) return;
@@ -56,20 +35,13 @@ function showToast(message, duration = 3000) {
   setTimeout(() => toast.classList.remove('show'), duration);
 }
 
-// ─────────────────────────────────────────────────────────────
-// SECTION NAVIGATION
-// ─────────────────────────────────────────────────────────────
 function showSection(name) {
   document.querySelectorAll('.portal-section').forEach(s => s.classList.remove('active'));
   document.querySelectorAll('.nav-item[data-section]').forEach(b => b.classList.remove('active'));
-
   const section = document.getElementById('section-' + name);
   const button = document.querySelector(`.nav-item[data-section="${name}"]`);
-
   if (section) section.classList.add('active');
   if (button) button.classList.add('active');
-
-  // Lazy load data when switching tabs
   if (name === 'patient') loadPatients();
   else if (name === 'appointment') loadAppointments();
   else if (name === 'waitlist') loadWaitlist();
@@ -77,9 +49,6 @@ function showSection(name) {
   else if (name === 'feedback') loadFeedback();
 }
 
-// ─────────────────────────────────────────────────────────────
-// AUTH CHECK ON PAGE LOAD
-// ─────────────────────────────────────────────────────────────
 async function checkAuth() {
   try {
     const data = await apiFetch('/api/me');
@@ -96,12 +65,8 @@ async function checkAuth() {
   }
 }
 
-// ─────────────────────────────────────────────────────────────
-// LOGOUT
-// ─────────────────────────────────────────────────────────────
 function logout() {
   if (!confirm('Are you sure you want to log out?')) return;
-
   fetch('/api/logout', {
     method: 'POST',
     credentials: 'include'
@@ -116,12 +81,10 @@ function logout() {
     });
 }
 
-// ═══════════════════════════════════════════════════════════════
-// PATIENTS
-// ═══════════════════════════════════════════════════════════════
 async function loadPatients() {
   try {
-    allPatients = await apiFetch('/api/patients');
+    const response = await apiFetch('/api/patients');
+    allPatients = response.data || [];
     renderPatientGrid(allPatients);
     renderPatientStats(allPatients);
   } catch (err) {
@@ -136,7 +99,6 @@ function renderPatientStats(patients) {
   const normal = patients.filter(p => p.bmi_status === 'Normal').length;
   const overweight = patients.filter(p => p.bmi_status === 'Overweight').length;
   const underweight = patients.filter(p => p.bmi_status === 'Underweight').length;
-
   stats.innerHTML = `
     <div class="stat-card">
       <div class="stat-label">Total Patients</div>
@@ -167,12 +129,10 @@ function renderPatientGrid(patients) {
     grid.innerHTML = `<p style="color:var(--text-muted); text-align:center; grid-column:1/-1; padding:40px;">No patients found.</p>`;
     return;
   }
-
   grid.innerHTML = patients.map(p => {
     const initials = getInitials(p.full_name);
     const bmiClass = p.bmi_status === 'Overweight' ? 'bmi-overweight' :
                      p.bmi_status === 'Underweight' ? 'bmi-underweight' : 'bmi-normal';
-
     return `
       <article class="patient-card" aria-label="Patient: ${escapeHtml(p.full_name)}">
         <div class="patient-card-header">
@@ -219,7 +179,6 @@ function filterPatients(query) {
   renderPatientGrid(filtered);
 }
 
-// Patient Modal
 function openAddPatientModal() {
   if (allPatients.length >= 50) {
     showToast('⚠️ Maximum of 50 patients reached.', 4000);
@@ -275,26 +234,23 @@ async function savePatient(event) {
     home_address: document.getElementById('pAddress').value.trim(),
     contact_no: document.getElementById('pContact').value.trim()
   };
-
   if (!payload.full_name || !payload.lrn) {
     showToast('⚠️ Full Name and LRN are required.', 3000);
     return;
   }
-
   try {
     let res;
     if (id) {
-      res = await apiFetch(`/patients/${id}`, {
+      res = await apiFetch(`/api/patients/${id}`, {
         method: 'PUT',
         body: payload
       });
     } else {
-      res = await apiFetch('/patients', {
+      res = await apiFetch('/api/patients', {
         method: 'POST',
         body: payload
       });
     }
-
     showToast(id ? '✅ Patient updated!' : '✅ Patient added!');
     closePatientModal();
     loadPatients();
@@ -306,7 +262,7 @@ async function savePatient(event) {
 async function deletePatient(id) {
   if (!confirm('Delete this patient record? This cannot be undone.')) return;
   try {
-    await apiFetch(`/patients/${id}`, { method: 'DELETE' });
+    await apiFetch(`/api/patients/${id}`, { method: 'DELETE' });
     showToast('🗑 Patient deleted.');
     loadPatients();
   } catch (err) {
@@ -314,26 +270,20 @@ async function deletePatient(id) {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════
-// APPOINTMENTS INBOX
-// ═══════════════════════════════════════════════════════════════
 async function loadAppointments() {
   const tbody = document.getElementById('appointmentsBody');
   tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:20px;">Loading…</td></tr>`;
-
   try {
-    const appts = await apiFetch('/appointments');
-
+    const response = await apiFetch('/api/appointments');
+    const appts = response.data || [];
     const pendingCount = appts.filter(a => a.status === 'Pending').length;
     const badge = document.getElementById('pendingBadge');
     badge.textContent = pendingCount;
     badge.style.display = pendingCount > 0 ? 'inline' : 'none';
-
     if (!appts.length) {
       tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; color:var(--text-muted); padding:30px;">No appointment requests yet.</td></tr>`;
       return;
     }
-
     tbody.innerHTML = appts.map((a, i) => `
       <tr>
         <td>${i + 1}</td>
@@ -362,13 +312,13 @@ async function loadAppointments() {
 
 async function updateAppointmentStatus(id, status) {
   try {
-    await apiFetch(`/appointments/${id}/status`, {
+    await apiFetch(`/api/appointments/${id}/status`, {
       method: 'PATCH',
       body: { status }
     });
     showToast(status === 'Approved' ? '✅ Approved & added to Waitlist!' : '❌ Rejected.', 3000);
     loadAppointments();
-    loadWaitlist(); // Refresh waitlist if open
+    loadWaitlist();
   } catch (err) {
     showToast(`❌ ${err.message}`, 4000);
   }
@@ -377,7 +327,7 @@ async function updateAppointmentStatus(id, status) {
 async function deleteAppointment(id) {
   if (!confirm('Remove this appointment from the list?')) return;
   try {
-    await apiFetch(`/appointments/${id}`, { method: 'DELETE' });
+    await apiFetch(`/api/appointments/${id}`, { method: 'DELETE' });
     showToast('🗑 Appointment removed.');
     loadAppointments();
   } catch (err) {
@@ -385,15 +335,12 @@ async function deleteAppointment(id) {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════
-// WAITLIST
-// ═══════════════════════════════════════════════════════════════
 async function loadWaitlist() {
   const tbody = document.getElementById('waitlistBody');
   tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:20px;">Loading…</td></tr>`;
-
   try {
-    const items = await apiFetch('/appointments/waitlist');
+    const response = await apiFetch('/api/appointments/waitlist');
+    const items = response.data || [];
     if (!items.length) {
       tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color:var(--text-muted); padding:30px;">No approved appointments yet.</td></tr>`;
       return;
@@ -414,15 +361,12 @@ async function loadWaitlist() {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════
-// RECORDS (your original logic with auth fix)
-// ╗═══════════════════════════════════════════════════════════════
 async function loadRecords() {
   const grid = document.getElementById('recordsGrid');
   grid.innerHTML = `<p style="color:var(--text-muted);">Loading…</p>`;
-
   try {
-    const records = await apiFetch('/records');
+    const response = await apiFetch('/api/records');
+    const records = response.data || [];
     if (!records.length) {
       grid.innerHTML = `
         <div style="grid-column:1/-1; text-align:center; padding:50px; color:var(--text-muted);">
@@ -448,7 +392,7 @@ async function loadRecords() {
 
 async function createNewRecord() {
   try {
-    const data = await apiFetch('/records', {
+    const data = await apiFetch('/api/records', {
       method: 'POST',
       body: { title: 'Untitled Record' }
     });
@@ -459,33 +403,61 @@ async function createNewRecord() {
 }
 
 async function openRecord(id) {
+  console.log(`openRecord called with id: ${id}`);
   try {
-    const record = await apiFetch(`/records/${id}`);
-    currentRecordId = record.id;
+    const response = await apiFetch(`/api/records/${id}`);
+    console.log('Full response:', response);
+
+    if (!response.success || !response.data) {
+      throw new Error('Invalid record data');
+    }
+
+    const record = response.data;
+    currentRecordId = record.id;  
+    console.log('Set currentRecordId to:', currentRecordId);
+
     document.getElementById('editorTitle').value = record.title || 'Untitled Record';
     document.getElementById('editorTextarea').value = record.content || '';
     document.getElementById('recordsGridView').classList.add('hidden');
     document.getElementById('recordEditorView').classList.remove('hidden');
     document.getElementById('editorTextarea').focus();
   } catch (err) {
-    showToast(`❌ ${err.message}`, 4000);
+    console.error('Failed to open record:', err);
+    showToast(`❌ Failed to load record: ${err.message}`, 5000);
   }
 }
 
 async function saveRecord() {
-  if (!currentRecordId) return;
+  console.log('saveRecord called — currentRecordId =', currentRecordId);
+  if (!currentRecordId) {
+    console.warn('saveRecord exited early — no currentRecordId');
+    showToast('⚠️ No record selected to save', 3000);
+    return;
+  }
   const title = document.getElementById('editorTitle').value.trim() || 'Untitled Record';
   const content = document.getElementById('editorTextarea').value;
-
   try {
-    await apiFetch(`/records/${currentRecordId}`, {
+    console.log(`Saving record ${currentRecordId}...`);
+    await apiFetch(`/api/records/${currentRecordId}`, {
       method: 'PUT',
       body: { title, content }
     });
     showToast('💾 Record saved!');
   } catch (err) {
+    console.error('Save failed:', err);
     showToast(`❌ ${err.message}`, 4000);
   }
+}
+
+async function deleteCurrentRecord() {
+  console.log('deleteCurrentRecord called — currentRecordId =', currentRecordId);
+  if (!currentRecordId) {
+    console.warn('deleteCurrentRecord exited early — no currentRecordId');
+    showToast('⚠️ No record selected to delete', 3000);
+    return;
+  }
+  if (!confirm('Delete this record permanently?')) return;
+  await deleteRecord(currentRecordId, true);
 }
 
 function closeEditor() {
@@ -497,16 +469,12 @@ function closeEditor() {
   });
 }
 
-async function deleteCurrentRecord() {
-  if (!currentRecordId) return;
-  if (!confirm('Delete this record permanently?')) return;
-  await deleteRecord(currentRecordId, true);
-}
-
 async function deleteRecord(id, fromEditor = false) {
+  console.log('deleteRecord() called — id:', id, 'fromEditor:', fromEditor);
   if (!fromEditor && !confirm('Delete this record permanently?')) return;
   try {
-    await apiFetch(`/records/${id}`, { method: 'DELETE' });
+    console.log('Sending DELETE to /api/records/' + id);
+    await apiFetch(`/api/records/${id}`, { method: 'DELETE' });
     showToast('🗑 Record deleted.');
     if (fromEditor) {
       document.getElementById('recordEditorView').classList.add('hidden');
@@ -515,19 +483,17 @@ async function deleteRecord(id, fromEditor = false) {
     }
     loadRecords();
   } catch (err) {
+    console.error('Delete failed:', err);
     showToast(`❌ ${err.message}`, 4000);
   }
 }
 
-// ═══════════════════════════════════════════════════════════════
-// FEEDBACK
-// ═══════════════════════════════════════════════════════════════
 async function loadFeedback() {
   const tbody = document.getElementById('feedbackBody');
   tbody.innerHTML = `<tr><td colspan="4" style="text-align:center; padding:20px;">Loading…</td></tr>`;
-
   try {
-    const items = await apiFetch('/feedback');
+    const response = await apiFetch('/api/feedback');
+    const items = response.data || [];
     if (!items.length) {
       tbody.innerHTML = `<tr><td colspan="4" style="text-align:center; color:var(--text-muted); padding:30px;">No feedback messages yet.</td></tr>`;
       return;
@@ -550,7 +516,7 @@ async function loadFeedback() {
 async function deleteFeedback(id) {
   if (!confirm('Delete this feedback message?')) return;
   try {
-    await apiFetch(`/feedback/${id}`, { method: 'DELETE' });
+    await apiFetch(`/api/feedback/${id}`, { method: 'DELETE' });
     showToast('🗑 Feedback deleted.');
     loadFeedback();
   } catch (err) {
@@ -558,9 +524,6 @@ async function deleteFeedback(id) {
   }
 }
 
-// ─────────────────────────────────────────────────────────────
-// HELPERS (keep your original ones)
-// ─────────────────────────────────────────────────────────────
 function getInitials(name) {
   if (!name) return '?';
   const parts = name.trim().split(' ').filter(Boolean);
@@ -583,19 +546,13 @@ function escapeHtml(str) {
   return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-// Close modal on overlay click
 document.getElementById('patientModal').addEventListener('click', function(e) {
   if (e.target === this) closePatientModal();
 });
 
-// ─────────────────────────────────────────────────────────────
-// INITIALIZE
-// ─────────────────────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', async () => {
   const authenticated = await checkAuth();
   if (!authenticated) return;
-
-  // Load initial data
   loadPatients();
-  loadAppointments(); // for badge count
+  loadAppointments();
 });
